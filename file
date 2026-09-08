@@ -1,0 +1,77 @@
+import csv
+import re
+from urllib.parse import urlparse
+import requests
+
+# Set a standard User-Agent header to avoid basic 403 errors
+HEADERS = {
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/120.0.0.0 Safari/537.36'
+    )
+}
+
+# Regex pattern matching standard public email address formats
+EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+# Add target company website contact pages here
+TARGET_URLS = [
+    'https://example.com/contact',
+    'https://example.com/about',
+]
+
+
+def extract_emails_from_url(url):
+    """Fetch URL content and extract email addresses using regular expressions."""
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        response.raise_for_status()
+
+        # Find all unique emails on the page
+        emails = set(re.findall(EMAIL_REGEX, response.text))
+
+        # Filter out common false-positive static assets (e.g., image files, placeholders)
+        valid_emails = [
+            email
+            for email in emails
+            if not email.endswith(
+                ('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp')
+            )
+        ]
+        return valid_emails
+
+    except requests.RequestException as error:
+        print(f'[!] Error fetching {url}: {error}')
+        return []
+
+
+def main():
+    results = []
+
+    print('[*] Processing URL list...')
+    for url in TARGET_URLS:
+        print(f' -> Scanning: {url}')
+        found_emails = extract_emails_from_url(url)
+
+        domain = urlparse(url).netloc
+        for email in found_emails:
+            results.append({'Domain': domain, 'URL': url, 'Email': email})
+
+    # Save output to a CSV file
+    output_filename = 'contacts.csv'
+    with open(output_filename, 'w', newline='', encoding='utf-8') as csv_file:
+        fieldnames = ['Domain', 'URL', 'Email']
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+        writer.writeheader()
+        writer.writerows(results)
+
+    print(
+        f'[+] Execution complete. Found {len(results)} emails. Saved to'
+        f' {output_filename}'
+    )
+
+
+if __name__ == '__main__':
+    main()
